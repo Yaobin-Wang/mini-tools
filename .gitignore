@@ -1,0 +1,46 @@
+# Dependencies, runtime data, browser profiles and local databases (all apps).
+node_modules/
+.runtime/
+browser-profile/
+browser-cache/
+test-profile/
+test-browsers/
+IndexedDB/
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.leveldb/
+
+# Personal backups and exports must never be published.
+Data_BackUp/
+backups/
+todo_*.json
+
+# Generated builds, reports and logs.
+dist/
+build/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+*.log
+*.tmp
+
+# Credentials and machine-specific configuration.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+.npmrc.local
+.idea/
+.vscode/
+*.lnk
+*.local
+.DS_Store
+Thumbs.db
+Desktop.ini

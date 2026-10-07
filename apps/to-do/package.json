@@ -1,0 +1,38 @@
+{
+  "name": "todo-desktop-v2",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/run.mjs dev",
+    "build": "node scripts/run.mjs build",
+    "start": "node scripts/run.mjs start",
+    "test": "node scripts/run.mjs test",
+    "test:e2e": "node scripts/run.mjs e2e"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "26.5.0",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "@vitejs/plugin-react": "6.1.1",
+    "prettier": "3.9.6",
+    "typescript": "7.0.2",
+    "vite": "8.2.2",
+    "vitest": "5.0.0"
+  },
+  "dependencies": {
+    "@dnd-kit/core": "6.3.1",
+    "@dnd-kit/sortable": "10.0.0",
+    "@dnd-kit/utilities": "3.2.2",
+    "@fontsource/jetbrains-mono": "5.3.0",
+    "@xyflow/react": "12.11.6",
+    "dompurify": "3.4.15",
+    "idb": "8.0.3",
+    "immer": "11.1.18",
+    "lucide-react": "1.43.0",
+    "marked": "18.0.12",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  }
+}
