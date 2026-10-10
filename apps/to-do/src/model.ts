@@ -46,6 +46,19 @@ export type Region = {
   groupIds: string[];
 };
 export type Entry = { content: string; updatedAt: number };
+export type LongTermGoal = {
+  id: string; title: string; description: string; targetDate: string;
+  completed: boolean; createdAt: number; updatedAt: number; completedAt?: number;
+};
+export type DailyGoal = {
+  id: string;
+  title: string;
+  completed: boolean;
+  createdAt: number;
+  completedAt?: number;
+};
+export type DailyEntry = Entry & { goals?: DailyGoal[]; contentInitialized?: boolean };
+export type RestTracking = { id: string; startedAt: number; days: Record<string, number> };
 export type MonthlyEntry = Entry & {
   checklist: { text: string; answer: string; completed?: boolean }[];
 };
@@ -56,7 +69,9 @@ export type Workspace = {
   groups: Group[];
   links: Link[];
   regions?: Region[];
-  dailyEntries: Record<string, Entry>;
+  longTermGoals?: LongTermGoal[];
+  dailyEntries: Record<string, DailyEntry>;
+  restTracking?: Record<string, RestTracking>;
   monthlyEntries: Record<string, MonthlyEntry>;
   monthlyTemplate: string[];
   viewport: { x: number; y: number; zoom: number };
@@ -81,6 +96,25 @@ export const dayKey = (d = new Date()) =>
   ].join('-');
 export const monthKey = (d = new Date()) => dayKey(d).slice(0, 7);
 export const template = '### DO\n- \n\n### UnDo\n- \n\n### Thinking\n- ';
+export const isEmptyDailyTemplate = (content: string) =>
+  content.replace(/\s/g, '') === template.replace(/\s/g, '');
+export const dailyContent = (entry?: DailyEntry) =>
+  !entry || isEmptyDailyTemplate(entry.content) ? '' : entry.content;
+export function mergeRestTracking(w: Workspace, incoming: RestTracking) {
+  const sources = (w.restTracking ??= {});
+  const old = sources[incoming.id];
+  if (!old) sources[incoming.id] = structuredClone(incoming);
+  else {
+    old.startedAt = Math.min(old.startedAt, incoming.startedAt);
+    for (const [date, ms] of Object.entries(incoming.days))
+      old.days[date] = Math.max(old.days[date] ?? 0, ms);
+  }
+}
+export function restTimeForDate(w: Workspace, date: string): number | null {
+  const sources = Object.values(w.restTracking ?? {});
+  if (!sources.some((s) => dayKey(new Date(s.startedAt)) <= date) || date > dayKey()) return null;
+  return sources.reduce((total, s) => total + (s.days[date] ?? 0), 0);
+}
 export function emptyWorkspace(): Workspace {
   return {
     schemaVersion: 2,
@@ -280,6 +314,29 @@ function validateReviews(raw: Record<string, any>) {
           ? /^\d{4}-\d{2}-\d{2}$/.test(date) && dayKey(new Date(date + 'T12:00:00')) === date
           : /^\d{4}-(0[1-9]|1[0-2])$/.test(date);
       assert(valid, '日期无效：' + date);
+      if (key === 'dailyEntries') {
+        assert(
+          e.contentInitialized === undefined || typeof e.contentInitialized === 'boolean',
+          '正文初始化标记无效',
+        );
+        assert(e.goals === undefined || Array.isArray(e.goals), '每日目标必须是数组');
+        const ids = new Set<string>();
+        for (const goal of e.goals ?? []) {
+          assert(
+            obj(goal) &&
+              str(goal.id) &&
+              goal.id.length > 0 &&
+              !ids.has(goal.id) &&
+              str(goal.title) &&
+              goal.title.trim().length > 0 &&
+              typeof goal.completed === 'boolean' &&
+              finite(goal.createdAt) &&
+              (goal.completedAt === undefined || finite(goal.completedAt)),
+            '每日目标格式错误',
+          );
+          ids.add(goal.id);
+        }
+      }
       if (key === 'monthlyEntries')
         assert(
           Array.isArray(e.checklist) &&
@@ -297,6 +354,34 @@ export function importWorkspace(raw: unknown): Workspace {
   if (raw.schemaVersion !== undefined && raw.schemaVersion !== 2) throw Error('不支持的备份版本');
   if (raw.schemaVersion === 2) {
     const w = structuredClone(raw) as Workspace;
+    assert(w.longTermGoals === undefined || Array.isArray(w.longTermGoals), '长期方向必须是数组');
+    const directionIds = new Set<string>();
+    for (const g of w.longTermGoals ?? []) {
+      assert(obj(g) && str(g.id) && g.id.length > 0 && !directionIds.has(g.id) && str(g.title) && g.title.trim().length > 0 &&
+        str(g.description) && str(g.targetDate) && (g.targetDate === '' || (/^\d{4}-\d{2}-\d{2}$/.test(g.targetDate) && dayKey(new Date(g.targetDate + 'T12:00:00')) === g.targetDate)) &&
+        typeof g.completed === 'boolean' && finite(g.createdAt) && finite(g.updatedAt) && (g.completedAt === undefined || finite(g.completedAt)), '长期方向格式错误');
+      directionIds.add(g.id);
+    }
+    assert(w.restTracking === undefined || obj(w.restTracking), '提醒计时汇总无效');
+    for (const [id, source] of Object.entries(w.restTracking ?? {})) {
+      assert(
+        obj(source) &&
+          source.id === id &&
+          id.length > 0 &&
+          finite(source.startedAt) &&
+          source.startedAt >= 0 &&
+          obj(source.days),
+        '提醒计时来源无效',
+      );
+      for (const [date, ms] of Object.entries(source.days))
+        assert(
+          /^\d{4}-\d{2}-\d{2}$/.test(date) &&
+            dayKey(new Date(date + 'T12:00:00')) === date &&
+            finite(ms) &&
+            ms >= 0,
+          '每日提醒计时无效',
+        );
+    }
     assert(
       obj(w.tasks) && Array.isArray(w.groups) && Array.isArray(w.links),
       '任务、组或连线格式错误',
@@ -497,8 +582,10 @@ export function summary(w: Workspace) {
     w.groups.length +
     ' 个组 · ' +
     Object.keys(w.dailyEntries).length +
-    ' 天复盘 · ' +
+    ' 天每日记录 · ' +
+    Object.values(w.dailyEntries).reduce((n, e) => n + (e.goals?.length ?? 0), 0) +
+    ' 条每日目标 · ' +
     Object.keys(w.monthlyEntries).length +
-    ' 个月度记录'
+    ' 个月度记录 · ' + (w.longTermGoals?.length ?? 0) + ' 项长期方向'
   );
 }

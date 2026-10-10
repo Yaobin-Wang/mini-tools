@@ -9,7 +9,7 @@ try {
     try { $Health = Invoke-RestMethod -Uri 'http://127.0.0.1:4173/healthz' -TimeoutSec 2 } catch {}
     if ($Health) {
         if ($Health.app -ne 'todo-desktop-v2' -or [IO.Path]::GetFullPath($Health.root).TrimEnd('\') -ne $ExpectedRoot) { throw '4173 端口已被其他应用占用，未启动或终止任何其他服务。' }
-        if ($Health.restApi -ne 3) {
+        if ($Health.restApi -ne 4) {
             $OldService = Get-CimInstance Win32_Process -Filter ("ProcessId = " + [int]$Health.pid)
             $ServerPath = Join-Path $TodoRoot 'scripts\server.mjs'
             $Listener = Get-NetTCPConnection -LocalPort 4173 -State Listen -ErrorAction Stop

@@ -1,6 +1,13 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { enablePatches, produceWithPatches, applyPatches, type Patch } from 'immer';
-import { emptyWorkspace, normalize, isDone, type Workspace } from './model';
+import {
+  emptyWorkspace,
+  normalize,
+  isDone,
+  mergeRestTracking,
+  importWorkspace,
+  type Workspace,
+} from './model';
 import { readWorkspace, saveWorkspace, replaceWorkspace, downloadWorkspace } from './storage';
 enablePatches();
 type Mutation = (draft: Workspace) => void;
@@ -129,8 +136,25 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     channel.current?.postMessage('saved');
     refresh((n) => n + 1);
   };
-  const exportData = (auto = false) => {
-    downloadWorkspace(current.current, auto);
+  const exportData = async (auto = false) => {
+    let source;
+    try {
+      const response = await fetch('/api/rest/state', { signal: AbortSignal.timeout(2000) });
+      if (response.ok) source = (await response.json()).tracking;
+    } catch {
+      /* Offline export retains the last saved statistics. */
+    }
+    const data = structuredClone(current.current);
+    if (source) {
+      try {
+        const checked = importWorkspace({ ...data, restTracking: { [source.id]: source } });
+        mergeRestTracking(data, checked.restTracking![source.id]);
+        if (!isReadonly.current) commit((d) => mergeRestTracking(d, source), false);
+      } catch {
+        /* Invalid external statistics cannot invalidate a workspace export. */
+      }
+    }
+    downloadWorkspace(data, auto);
     if (!auto && !isReadonly.current)
       commit(
         (d) => {

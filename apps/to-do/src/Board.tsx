@@ -113,6 +113,7 @@ import {
 } from './layout';
 import { IconButton, TextDialog, Modal, InlineAdd, Empty } from './ui';
 import { RegionNode, RegionSettings, RegionDrawing, expandRegion, arrangeRegions } from './Regions';
+import { LongTermGoals } from './LongTermGoals';
 const sides: Side[] = ['top', 'right', 'bottom', 'left'];
 type DragPointer = { clientX: number; clientY: number; altKey: boolean } | TouchEvent;
 type BoardAPI = {
@@ -974,8 +975,8 @@ function BoardCanvas({ openTask }: { openTask: (id: string) => void }) {
       }}
     >
       <div className="todo-page">
-        <div className="page-heading">
-          <div>
+        <div className="page-heading todo-heading">
+          <div className="todo-heading-copy">
             <div className="eyebrow">A LITTLE PROGRESS, EVERY DAY</div>
             <h1>
               待办事项
@@ -983,6 +984,7 @@ function BoardCanvas({ openTask }: { openTask: (id: string) => void }) {
             </h1>
             <p>把想做的事，放在看得见的地方。</p>
           </div>
+          <LongTermGoals />
           <div className="segmented status-tabs">
             <button className={!archive ? 'active' : ''} onClick={() => setArchive(false)}>
               未完成 <span>{w.groups.length - completed.length}</span>

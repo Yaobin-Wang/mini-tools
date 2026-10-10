@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Coffee, Pause, Play, Square } from 'lucide-react';
 import { Modal } from './ui';
+import type { RestTracking } from './model';
 
 type RestState = {
   status: 'idle' | 'running' | 'paused' | 'pending';
@@ -11,6 +12,7 @@ type RestState = {
   serverNow: number;
   attention: 'none' | 'waiting' | 'deferred' | 'shown' | 'failed';
   warning: string;
+  tracking?: RestTracking;
 };
 export function formatRestTime(ms: number) {
   const seconds = Math.max(0, Math.ceil(ms / 1000));

@@ -35,6 +35,7 @@ import {
   monthKey,
   isDone,
   type Workspace,
+  mergeRestTracking,
 } from './model';
 import { snapshots } from './storage';
 import { useRestReminder, RestReminderPage, RestReminderAlert } from './RestReminder';
@@ -604,6 +605,17 @@ function App() {
     exportData,
   } = useWorkspace();
   const reminder = useRestReminder(readonly);
+  useEffect(() => {
+    const incoming = reminder.state?.tracking;
+    if (!ready || readonly || !incoming) return;
+    const old = w.restTracking?.[incoming.id];
+    if (
+      !old ||
+      old.startedAt > incoming.startedAt ||
+      Object.entries(incoming.days).some(([date, ms]) => (old.days[date] ?? 0) < ms)
+    )
+      commit((d) => mergeRestTracking(d, incoming), false);
+  }, [ready, readonly, reminder.state?.tracking, w.restTracking]);
   const [page, setPage] = useState<'todo' | 'daily' | 'monthly' | 'rest'>('todo'),
     [detail, setDetail] = useState<string | null>(null),
     [settings, setSettings] = useState(false),

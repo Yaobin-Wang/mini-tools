@@ -91,6 +91,21 @@ export function windowBridge(root, profile = path.join(root, '.runtime/browser-p
   };
 }
 
+export function addRestElapsed(days, from, to) {
+  // Split at local midnight, including daylight-saving transitions.
+  while (from < to) {
+    const date = new Date(from);
+    const key = [
+      date.getFullYear(),
+      String(date.getMonth() + 1).padStart(2, '0'),
+      String(date.getDate()).padStart(2, '0'),
+    ].join('-');
+    const boundary = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1).getTime();
+    const end = Math.min(to, boundary);
+    days[key] = (days[key] ?? 0) + end - from;
+    from = end;
+  }
+}
 export function createRestService({
   root,
   bridge = windowBridge(root),
@@ -98,9 +113,20 @@ export function createRestService({
   stateFile = path.join(root, '.runtime/rest/state.json'),
 }) {
   let selectedMinutes = 60;
+  let tracking = { id: randomUUID(), startedAt: now(), days: {} };
   try {
     const saved = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
     if ([30, 60, 90].includes(saved.selectedMinutes)) selectedMinutes = saved.selectedMinutes;
+    if (
+      saved.tracking &&
+      typeof saved.tracking.id === 'string' &&
+      Number.isFinite(saved.tracking.startedAt) &&
+      saved.tracking.days &&
+      Object.entries(saved.tracking.days).every(
+        ([d, ms]) => /^\d{4}-\d{2}-\d{2}$/.test(d) && Number.isFinite(ms) && ms >= 0,
+      )
+    )
+      tracking = saved.tracking;
   } catch {
     /* First launch. */
   }
@@ -113,16 +139,29 @@ export function createRestService({
     roundId: null,
     attention: 'none',
     warning: '',
+    tracking,
+    accountedAt: null,
   };
   let busy = false,
     seenWindow = false,
     missingSince = null;
   const listeners = new Set();
-  const snapshot = () => ({ ...state, serverNow: now() });
+  function account(next) {
+    const tracking = { ...state.tracking, days: { ...state.tracking.days } };
+    if (state.status === 'running' && state.accountedAt !== null)
+      addRestElapsed(tracking.days, state.accountedAt, Math.min(now(), state.endsAt));
+    return {
+      ...next,
+      tracking,
+      accountedAt: next.status === 'running' ? Math.max(state.accountedAt ?? 0, now()) : null,
+    };
+  }
+  const snapshot = () => ({ ...account(state), serverNow: now() });
   const broadcast = () => {
     for (const listener of listeners) listener(snapshot());
   };
   function persist(next) {
+    next = account(next);
     fs.mkdirSync(path.dirname(stateFile), { recursive: true });
     fs.writeFileSync(stateFile + '.tmp', JSON.stringify(next));
     fs.renameSync(stateFile + '.tmp', stateFile);
@@ -210,6 +249,8 @@ export function createRestService({
       }
       seenWindow = true;
       missingSince = null;
+      if (state.status === 'running' && now() - state.accountedAt >= 15000 && now() < state.endsAt)
+        persist({ ...state });
       if (state.status === 'running' && now() >= state.endsAt)
         persist({
           ...state,
@@ -257,6 +298,7 @@ export function createRestService({
     },
     async close() {
       clearInterval(interval);
+      persist({ ...state, status: 'idle', endsAt: null, remainingMs: 0, attention: 'none' });
       await bridge.close();
     },
   };

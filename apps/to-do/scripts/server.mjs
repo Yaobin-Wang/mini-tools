@@ -39,7 +39,7 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/healthz') {
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     res.end(
-      JSON.stringify({ app: 'todo-desktop-v2', version: 2, restApi: 3, root, pid: process.pid }),
+      JSON.stringify({ app: 'todo-desktop-v2', version: 2, restApi: 4, root, pid: process.pid }),
     );
     return;
   }

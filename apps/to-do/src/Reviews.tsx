@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   CalendarDays,
   ChevronLeft,
@@ -11,12 +11,43 @@ import {
   Check,
 } from 'lucide-react';
 import { useWorkspace } from './state';
-import { dayKey, monthKey, calendarMonth, contentLength, level, template } from './model';
+import {
+  dayKey,
+  monthKey,
+  calendarMonth,
+  contentLength,
+  level,
+  dailyContent,
+  isEmptyDailyTemplate,
+  restTimeForDate,
+} from './model';
+import { DailyGoals } from './DailyGoals';
 import { MarkdownEditor, IconButton, Modal } from './ui';
 export function Daily() {
-  const { w, commit, readonly, flush } = useWorkspace(),
+  const { w, commit, flush, readonly } = useWorkspace(),
     [date, setDate] = useState(dayKey()),
     [year, setYear] = useState(new Date().getFullYear());
+  const [today, setToday] = useState(dayKey());
+  useEffect(() => {
+    if (readonly || !Object.values(w.dailyEntries).some(e => isEmptyDailyTemplate(e.content))) return;
+    commit(d => {
+      for (const entry of Object.values(d.dailyEntries)) {
+        if (isEmptyDailyTemplate(entry.content)) {
+          entry.content = '';
+          entry.contentInitialized = true;
+        }
+      }
+    }, false);
+  }, [w.dailyEntries, readonly, commit]);
+  useEffect(() => {
+    const tick = () => setToday(dayKey());
+    const timer = setInterval(tick, 1000);
+    window.addEventListener('focus', tick);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('focus', tick);
+    };
+  }, []);
   const entry = w.dailyEntries[date] || { content: '', updatedAt: 0 },
     counts = useMemo(
       () =>
@@ -33,10 +64,23 @@ export function Daily() {
   };
   const write = (s: string) =>
     commit((d) => {
-      d.dailyEntries[date] = { content: s, updatedAt: Date.now() };
+      const e = (d.dailyEntries[date] ??= { content: '', updatedAt: 0 });
+      e.content = s;
+      e.contentInitialized = true;
+      e.updatedAt = Date.now();
     }, false);
+  const goalCount = entry.goals?.length ?? 0;
+  const goalDone = entry.goals?.filter((g) => g.completed).length ?? 0;
+  const restMs = restTimeForDate(w, date);
+  const restMinutes = Math.floor((restMs ?? 0) / 60000);
+  const restLabel =
+    restMs === null
+      ? '—'
+      : restMinutes >= 60
+        ? `${Math.floor(restMinutes / 60)} 小时 ${restMinutes % 60} 分`
+        : `${restMinutes} 分钟`;
   return (
-    <div className="review-page">
+    <div className="review-page daily-page">
       <div className="page-heading">
         <div>
           <div className="eyebrow">LEAVE A TRACE OF TODAY</div>
@@ -44,7 +88,7 @@ export function Daily() {
             每日复盘
             <span className="heading-dot" />
           </h1>
-          <p>写下一点思考，就是今天的印记。</p>
+          <p>列下今天的目标，留下今天的思考。</p>
         </div>
       </div>
       <div className="daily-layout">
@@ -61,6 +105,11 @@ export function Daily() {
             </div>
             <div className="journal-date-tools">
               <div className="review-date">
+                {date !== today && (
+                  <button className="button ghost" onClick={() => choose(today)}>
+                    回到今天
+                  </button>
+                )}
                 <CalendarDays size={17} />
                 <input
                   aria-label="复盘日期"
@@ -84,23 +133,16 @@ export function Daily() {
               </span>
             </div>
           </div>
-          <div className="paper-panel">
+          <div className="paper-panel daily-paper">
+            <DailyGoals key={'goals-' + date} date={date} />
             <MarkdownEditor
-              key={date}
+              key={'review-' + date}
               label="思考与总结"
-              value={entry.content}
+              value={dailyContent(w.dailyEntries[date])}
               onChange={write}
               minHeight={400}
             />
-            <div className="journal-actions">
-              <button
-                className="button ghost"
-                disabled={readonly}
-                onClick={() => write(entry.content + (entry.content ? '\n\n' : '') + template)}
-              >
-                <Plus size={15} />
-                插入复盘模板
-              </button>
+            <div className="journal-actions daily-summary">
               <span>
                 {entry.updatedAt
                   ? '更新于 ' +
@@ -108,7 +150,14 @@ export function Daily() {
                       hour: '2-digit',
                       minute: '2-digit',
                     })
-                  : '从一句话开始也很好'}
+                  : '尚未编辑'}
+              </span>
+              <span>正文 {counts[date] || 0} 字</span>
+              <span>
+                目标 {goalDone}/{goalCount}
+              </span>
+              <span title="倒计时实际运行的累计时间：暂停与到期等待不计入，延后计入；休眠经过时间按结束时刻封顶。不是实际休息或专注时长。旧日期没有统计时显示 —。">
+                提醒计时 {restLabel}
               </span>
             </div>
           </div>
